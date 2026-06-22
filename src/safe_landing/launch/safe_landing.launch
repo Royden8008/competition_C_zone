@@ -1,0 +1,31 @@
+<launch>
+  <!--
+    safe_landing standalone launch.
+    Brings up just the safe_landing node and an rviz visualization.
+    Assumes you've started the rest of the stack separately:
+      - PX4 + MAVROS
+      - LiDAR driver (e.g. livox_ros_driver2)
+      - FAST-LIO publishing /cloud_registered
+      - EGO-Planner subscribing /move_base_simple/goal (optional but recommended)
+      - ar_track_alvar (optional, for marker mode)
+  -->
+
+  <arg name="config" default="$(find safe_landing)/config/safe_landing.yaml"/>
+  <arg name="rviz"   default="false"/>
+  <arg name="enabled" default="true"/>
+  <arg name="external_control" default="false"/>
+  <arg name="cruise_only" default="false"/>
+  <arg name="cruise_height" default="1.0"/>
+
+  <node pkg="safe_landing" type="safe_landing_node" name="safe_landing_node"
+        output="screen">
+    <rosparam command="load" file="$(arg config)"/>
+    <param name="enabled" value="$(arg enabled)"/>
+    <param name="external_control" value="$(arg external_control)"/>
+    <param name="cruise_only" value="$(arg cruise_only)"/>
+    <param name="cruise_height" value="$(arg cruise_height)"/>
+  </node>
+
+  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="safe_landing_rviz"
+        args="-d $(find safe_landing)/rviz/safe_landing.rviz"/>
+</launch>

@@ -1,0 +1,118 @@
+# safe_landing 参数文件
+# 距离单位默认是米；角度除特别说明外默认是度。
+# waypoints 里的 yaw 使用弧度 rad。
+#
+# waypoints 的坐标解释:
+#   - x/y 是相对“使能 safe_landing 时飞机位姿”的起飞体坐标系偏移。
+#   - +x 表示当时机头前方，+y 表示当时机体左/右方向取决于代码里的体坐标约定。
+#   - z = 0 表示使用 cruise_height；非 0 表示相对起飞地面的目标高度 AGL。
+# 这个约定用于让比赛场地固定后，可以只填相对起点的航点。
+
+# ===================== 话题与日志 =====================
+cloud_topic:    "/cloud_registered"       # FAST-LIO/LiDAR 输出点云话题，避障、降落区评估和守护下降都依赖它。
+marker_topic:   "/ar_pose_marker"         # AR 标记话题；use_marker=false 时不会实际使用。
+
+log_dir:        "/home/cwkj/competition_C_ws/logs"  # 飞行日志目录，自动写入带时间戳的 CSV，方便赛后复盘。
+                                                   # 放工作空间内（非 /tmp）：/tmp 重启会被清空，这里可长期留存、随空间走。
+
+# ===================== 基础任务参数 =====================
+cruise_height:        1.00                 # 避障巡航高度，单位 m；z=0 的航点会使用这个高度。
+takeoff_timeout:      15.0                 # safe_landing 自主管起飞时的超时；在 national_mission 架构里通常由总控起飞。
+
+# 最终降落目标，世界/map 坐标系。
+# 保持 .nan 表示“不指定固定降落点”，由主流程/当前位置决定降落评估中心。
+land_x:               .nan
+land_y:               .nan
+
+# AR marker 精准对准，可选功能。
+# 当前默认关闭；打开前要确认 ar_track_alvar、marker 坐标系和相机安装方向都正确。
+use_marker:           false
+marker_id:            -1                   # -1 表示接受看到的第一个 marker；非负数表示只认指定 ID。
+
+# ===================== 避障巡航航点 =====================
+# 每个航点字段:
+#   x/y: 相对使能 safe_landing 时的前后/左右偏移，单位 m。
+#   z: AGL 高度，0 表示使用 cruise_height。
+#   yaw: 相对初始 yaw 的偏航角，单位 rad。
+#   tol: 到点容差，单位 m；越小越贴点，但更容易等待/超时。
+#   v_max: 该航段最大水平速度，单位 m/s。
+waypoints:
+  - { x: 3.4, y:  0.0, z: 0.0, yaw: 0.0, tol: 0.25, v_max: 0.4 }
+
+# ===================== WaypointFollower: 反应式避障跟踪 =====================
+# 这一层负责沿规划路径飞，并用前方锥形区域 + 周围安全球做实时减速/停车。
+waypoint:
+  cone_half_angle_deg: 25.0     # 前方避障锥的半角；越大看得越宽，但更容易被侧边障碍影响。
+  cone_radius_min:     0.20     # 锥体在飞机附近的最小半径，单位 m。
+  slow_dist:           0.80     # 前方障碍小于该距离开始减速，单位 m。
+  stop_dist:           0.33     # 前方障碍小于该距离悬停，单位 m；应与 planner 膨胀半径协调。
+  emergency_dist:      0.28     # 紧急停车距离，单位 m；太大容易在窄门/窄缝中误停。
+  braking_margin:      0.15     # 制动余量，叠加到 v^2/(2a) 刹车距离上。
+  abort_hold_s:        0.4      # 连续阻塞超过该时间后，放弃当前小段并触发外层重规划。
+  side_radius:         0.28     # 机体周围全向安全半径，单位 m；应小于赛道窄缝半宽。
+  k_pos:               1.0      # 位置误差到速度指令的 P 增益。
+  accel_limit:         1.5      # 速度变化限幅，单位 m/s^2；越小动作越柔，但响应更慢。
+  leg_timeout_s:       30.0     # 单个航段最长执行时间，超时则跳过/返回超时结果。
+  skip_blocked_leg:    true     # true=阻塞后跳过当前小段让外层重规划；false=直接任务失败。
+
+# ===================== GridPlanner: 2D A* 路径规划 =====================
+# 这一层根据点云生成 2D 栅格，在平面上规划绕障路径。
+planner:
+  enabled:            true      # true=使用 A* 规划；false=直接用 WaypointFollower 飞原始航点。
+  resolution:         0.10      # 栅格分辨率，单位 m；越小路径更细，但计算量更大。
+  inflation_radius:   0.35       # 障碍膨胀半径，单位 m；越大越保守，窄通道越难通过。
+  xy_margin:          2.50      # 规划搜索框在起点/目标外扩的边距，单位 m。
+  obstacle_min_z_agl: 0.15      # 作为障碍参与规划的点云最低高度，相对地面，单位 m。
+  obstacle_max_z_agl: 2.00      # 作为障碍参与规划的点云最高高度，相对地面，单位 m。
+  waypoint_spacing:   0.80      # 规划路径输出的中间航点间距，单位 m。
+  waypoint_tol:       0.10      # 中间航点到点容差；越小越贴规划线，减少拐角内切。
+  waypoint_v_max:     0.40      # 中间航点限速；速度低一些可以减小转弯半径。
+  max_plan_points:    80        # 单次规划最多输出多少个中间航点，防止路径过长。
+  execute_points:     5         # 每次规划后先执行多少个点再重规划；越大越连续，越小越频繁更新。
+  max_replans:        20        # 每个目标点最多重规划次数，超过认为无法到达。
+  scan_yaw_step_deg:  30.0      # 规划失败时原地转头扫描的步进角度。
+  scan_max_yaw_deg:   120.0     # 规划失败时最大扫描角度范围。
+  scan_settle_s:      0.35      # 每次转头后等待点云稳定的时间，单位 s。
+  relaxed_inflation_radius: 0.33    # 放宽规划时使用的膨胀半径；不要小于 waypoint.stop_dist。
+  relaxed_xy_margin:        2.50    # 放宽规划时使用的搜索边距。
+  cluster_filter_enabled:   true    # true=对点云障碍做聚类过滤，减少噪点影响。
+  cluster_tolerance:        0.35    # 聚类距离阈值，单位 m。
+  cluster_min_points:       8       # 小于该点数的聚类会被当作噪点过滤。
+  cluster_max_points:       20000   # 聚类最大点数上限。
+
+# ===================== LandingZoneEvaluator: LiDAR 降落区评估 =====================
+# 在候选降落点附近找平整、无遮挡的地面圆盘。
+zone:
+  disc_radius:        0.40      # 用于拟合地面的圆盘半径，单位 m。
+  clear_radius:       0.30      # 检查降落点上方是否有障碍的半径，单位 m。
+  clear_height:       0.50      # 清空检查高度，单位 m；该高度内障碍点过多则拒绝。
+  max_slope_deg:      8.0       # 允许的最大地面坡度，单位 deg。
+  max_roughness:      0.03      # 允许的最大地面粗糙度，单位 m。
+  min_inliers:        50        # RANSAC 平面拟合最少内点数量。
+  max_clear_pts:      10        # 上方清空区域允许的最大障碍点数。
+  ransac_thresh:      0.02      # RANSAC 平面拟合距离阈值，单位 m。
+  search_radius:      1.00      # 候选点失败时，向周围搜索安全降落点的最大半径，单位 m。
+  search_step:        0.20      # 周围搜索步长，单位 m。
+  z_band_lo:          0.30      # 地面点云搜索下边界，相对候选地面高度，单位 m。
+  z_band_hi:          1.50      # 地面点云搜索上边界，相对候选地面高度，单位 m。
+
+# ===================== GuardedDescent: 守护下降 =====================
+# 在降落前半段用点云监控下方/周围障碍，安全时下降，异常时减速或中止。
+descent:
+  vz_nominal:         -0.30     # 正常下降速度，单位 m/s；NED/本地 z 方向按代码约定为负向下降。
+  vz_slow:            -0.15     # 接近障碍时的慢速下降速度，单位 m/s。
+  slow_dist:          0.40      # 下方障碍小于该距离开始慢降，单位 m。
+  stop_dist:          0.20      # 下方障碍小于该距离停止下降，单位 m。
+  abort_dist:         0.15      # 持续小于该距离则中止下降并重新评估，单位 m。
+  abort_hold_s:       2.0       # 障碍过近持续多久后触发中止，单位 s。
+  cone_half_angle_deg: 20.0     # 下视障碍检测锥半角。
+  cone_radius:        0.30      # 下视锥体近端半径，单位 m。
+  target_z:           0.30      # 守护下降目标离地高度 AGL，单位 m；之后交给 Precision/AUTO.LAND。
+
+# ===================== PrecisionLanding: 最后阶段精降 / AUTO.LAND =====================
+precision:
+  align_tol_xy:       0.05      # 使用 marker 时的水平对准容差，单位 m。
+  align_timeout_s:    5.0       # marker 对准最长等待时间，超时后不再对准，直接 AUTO.LAND。
+  kp_xy:              0.6       # marker 水平误差到速度的 P 增益。
+  max_v_xy:           0.20      # marker 对准最大水平速度，单位 m/s。
+  handoff_z_agl:      0.30      # 切给 AUTO.LAND 的高度，单位 m；当前代码主要用 target_z 控制交接高度。
