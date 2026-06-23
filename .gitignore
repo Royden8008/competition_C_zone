@@ -1,0 +1,13 @@
+# catkin 构建产物(每台机器各自 catkin_make 生成)
+/build/
+/devel/
+/install/
+
+# 运行时日志:CSV / 终端日志 / rosbag(大文件,不入库)
+/logs/
+
+# 编辑器 / 系统杂项
+*.swp
+*~
+.vscode/
+.idea/

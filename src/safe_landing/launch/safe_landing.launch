@@ -17,6 +17,28 @@
   <arg name="cruise_only" default="false"/>
   <arg name="cruise_height" default="1.0"/>
 
+  <!-- 滚动局部障碍地图。默认开:消费者吃累积后的 /cloud_local_map(更密、有记忆、有界)。
+       关掉退回原始单帧:  local_map:=false cloud_topic:=/cloud_registered -->
+  <arg name="local_map"    default="true"/>
+  <arg name="lidar_cloud"  default="/cloud_registered"/>   <!-- FAST-LIO 原始配准点云 -->
+  <arg name="cloud_topic"  default="/cloud_local_map"/>    <!-- safe_landing 实际消费的话题 -->
+  <arg name="map_odom_topic" default="/Odometry"/>         <!-- 与点云同系,用于按距离裁剪 -->
+  <arg name="map_max_age"   default="1.5"/>                <!-- [s]  记忆时长 -->
+  <arg name="map_max_range" default="6.0"/>                <!-- [m]  保留半径 -->
+  <arg name="map_voxel"     default="0.10"/>               <!-- [m]  体素下采样 -->
+  <arg name="map_max_frames" default="40"/>
+
+  <node if="$(arg local_map)" pkg="safe_landing" type="local_obstacle_map_node"
+        name="local_obstacle_map_node" output="screen">
+    <param name="input_topic"  value="$(arg lidar_cloud)"/>
+    <param name="output_topic" value="$(arg cloud_topic)"/>
+    <param name="odom_topic"   value="$(arg map_odom_topic)"/>
+    <param name="max_age"      value="$(arg map_max_age)"/>
+    <param name="max_range"    value="$(arg map_max_range)"/>
+    <param name="voxel_leaf"   value="$(arg map_voxel)"/>
+    <param name="max_frames"   value="$(arg map_max_frames)"/>
+  </node>
+
   <node pkg="safe_landing" type="safe_landing_node" name="safe_landing_node"
         output="screen">
     <rosparam command="load" file="$(arg config)"/>
@@ -24,6 +46,7 @@
     <param name="external_control" value="$(arg external_control)"/>
     <param name="cruise_only" value="$(arg cruise_only)"/>
     <param name="cruise_height" value="$(arg cruise_height)"/>
+    <param name="cloud_topic" value="$(arg cloud_topic)"/> <!-- 覆盖 yaml,指向局部地图 -->
   </node>
 
   <node if="$(arg rviz)" pkg="rviz" type="rviz" name="safe_landing_rviz"

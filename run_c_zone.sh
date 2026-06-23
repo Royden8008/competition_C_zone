@@ -5,7 +5,7 @@
 # 实飞用,默认【不开 RViz】(无线连接传点云会非常卡;RViz 留给离线复盘)。
 #
 # 用法:
-#   ./run_c_zone.sh                # 默认 cruise_height=1.8
+#   ./run_c_zone.sh                # 默认 cruise_height=1.0
 #   ./run_c_zone.sh 1.5            # 自定义巡航/限飞高度(米),务必 <2.0
 #
 # 飞完两份日志都在 ./logs/(随工作空间走,重启不丢):
@@ -18,7 +18,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="$SCRIPT_DIR/logs"
 
-CRUISE_HEIGHT="${1:-1.8}"
+CRUISE_HEIGHT="${1:-1.0}"
 STAMP="$(date +%Y%m%d_%H%M%S)"
 
 mkdir -p "$LOG_DIR"

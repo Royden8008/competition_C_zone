@@ -68,3 +68,10 @@ target_link_libraries(safe_landing_node
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
 )
+
+# 滚动局部障碍地图:夹在 /cloud_registered 与消费者之间做累积+裁剪,独立节点。
+add_executable(local_obstacle_map_node src/local_obstacle_map_node.cpp)
+target_link_libraries(local_obstacle_map_node
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
